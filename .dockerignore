@@ -1,0 +1,6 @@
+lakehouse/
+**/__pycache__/
+*.pyc
+.git/
+*.zip
+.pytest_cache/

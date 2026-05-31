@@ -1,0 +1,14 @@
+# Ruff linter config — https://docs.astral.sh/ruff/
+line-length = 110
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # line length handled by formatter, not enforced hard
+    "F403",  # allow `from pyspark.sql.functions import *` style if used
+    "F405",
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["F811", "E402"]

@@ -1,0 +1,96 @@
+"""Continuous Spark Structured Streaming pipeline.
+
+readStream(landing JSON)
+  -> foreachBatch:
+       1. append the micro-batch to the BRONZE Delta table
+       2. MERGE the cleaned rows into SILVER (idempotent CDC upsert; Change Data
+          Feed enabled so row-level changes can be read back)
+       3. read ONLY the silver CDF for the version this MERGE produced, and fold
+          those deltas into the compact GOLD state tables (see gold_incremental)
+       4. run the rules-driven data-quality engine on the batch and MERGE the
+          result into the Delta CONTROL tables (see dq_control) -- per-batch log
+          plus a cumulative, additive control table. No state is held in memory.
+
+Per-batch cost scales with the change volume, not silver's size. Everything the
+dashboard needs lives in Delta tables (gold state + DQ control); the FastAPI
+server reads those tables directly and pushes updates over SSE when a new Delta
+version is committed.
+"""
+from __future__ import annotations
+
+import os
+
+from pyspark.sql import functions as F
+
+import dq_checks as DQ
+import dq_control as DQC
+import gold_incremental as GI
+import silver_transform as ST
+from bronze_ingest import LANDING_SCHEMA
+from config import BRONZE_DIR, CHECKPOINT_DIR, LANDING_DIR, SILVER_DIR, ensure_dirs, p
+from dq_rules import SILVER_RULES
+from spark_session import get_spark
+
+
+def _silver_version(spark) -> int:
+    from delta.tables import DeltaTable
+    return DeltaTable.forPath(spark, p(SILVER_DIR)).history(1).select("version").first()[0]
+
+
+def process_batch(batch_df, batch_id: int) -> None:
+    if batch_df.isEmpty():
+        return  # change-driven: nothing new, don't touch the tables
+    spark = batch_df.sparkSession
+
+    # 1) BRONZE: append raw events
+    batch_df.write.format("delta").mode("append").option("mergeSchema", "true").save(p(BRONZE_DIR))
+
+    # 2) SILVER: clean -> CDC MERGE; capture the version range it writes
+    from delta.tables import DeltaTable
+    silver_new = ST.transform(batch_df)
+    if DeltaTable.isDeltaTable(spark, p(SILVER_DIR)):
+        start_version = _silver_version(spark) + 1
+        ST.merge_with_retry(DeltaTable.forPath(spark, p(SILVER_DIR)),
+                            silver_new, "t.line_key = s.line_key")
+    else:
+        (silver_new.write.format("delta")
+         .option("delta.enableChangeDataFeed", "true")
+         .mode("overwrite").save(p(SILVER_DIR)))
+        start_version = 0
+
+    # 3) CDF: read only the rows that changed, fold into gold state
+    changes = (spark.read.format("delta")
+               .option("readChangeFeed", "true")
+               .option("startingVersion", start_version)
+               .load(p(SILVER_DIR)))
+    GI.apply_cdf_to_gold(spark, changes)
+
+    # 4) DATA QUALITY: score this batch (pre-filter, so injected bad rows are
+    #    visible) and MERGE the result into the Delta control tables.
+    src = ST.dedupe(ST.clean_and_type(batch_df))
+    rep = DQ.run_expectations(src, SILVER_RULES)
+    DQC.record_batch(spark, batch_id, rep)
+
+    print(f"[batch {batch_id}] CDF (v>={start_version}) folded into gold; "
+          f"DQ control updated ({rep['row_count']} rows checked)")
+
+
+def run(trigger_seconds: float = 5.0) -> None:
+    ensure_dirs()
+    spark = get_spark("stream-pipeline")
+    stream = (spark.readStream
+              .schema(LANDING_SCHEMA)
+              .json(p(LANDING_DIR))
+              .withColumn("_ingested_at", F.current_timestamp())
+              .withColumn("_source_file", F.input_file_name()))
+    query = (stream.writeStream
+             .foreachBatch(process_batch)
+             .option("checkpointLocation", p(CHECKPOINT_DIR / "stream"))
+             .trigger(processingTime=f"{trigger_seconds} seconds")
+             .start())
+    print("streaming pipeline started; waiting for events...")
+    query.awaitTermination()
+
+
+if __name__ == "__main__":
+    run(float(os.environ.get("STREAM_TRIGGER", "5")))

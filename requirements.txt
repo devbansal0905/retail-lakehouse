@@ -1,0 +1,11 @@
+pyspark==3.5.1
+delta-spark==3.2.0
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9   # FastAPI login form parsing
+duckdb>=0.10
+deltalake>=0.18      # delta-rs: web reads the gold + DQ control Delta tables (no JVM)
+pyarrow>=14          # delta-rs -> Arrow -> DuckDB bridge
+google-genai>=0.3   # optional: Gemini backend for NL-to-SQL (rule-based fallback works without a key)
+neo4j>=5.0           # metadata knowledge graph (NL-to-SQL grounding)
+pytest>=7.4
