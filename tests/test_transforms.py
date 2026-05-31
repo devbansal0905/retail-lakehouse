@@ -160,7 +160,7 @@ def test_incremental_invoice_deltas_equal_full_recompute(spark):
            for r in d1.unionByName(d2).groupBy("invoice_no")
            .agg(F.round(F.sum("amount"), 2).alias("amount")).collect()}
     assert inc == full
-    assert full["A"] == 15.0 and full["B"] == 40.0  # B: 20*2
+    assert full["A"] == 15.0 and full["B"] == 20.0  # A: 10.0 + 5.0; B: one 20.0 line
 
 
 # --- NL-to-SQL grounding + validation (metadata + nl_to_sql) ----------------
