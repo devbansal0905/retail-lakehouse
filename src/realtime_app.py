@@ -376,7 +376,7 @@ _QUALITY_HTML = _page(
     extra_css=(
       ".crit{color:var(--amber);font-weight:600}"
       ".track{background:var(--line);border-radius:6px;height:8px;width:120px;display:inline-block;vertical-align:middle;margin-right:8px;overflow:hidden}"
-      ".fill{height:100%;border-radius:6px}"
+      ".fill{display:block;height:100%;border-radius:6px;transition:width .3s ease}"
       ".tabs{display:flex;align-items:center;gap:8px;margin-bottom:16px}"
       ".tab{background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:9px;padding:8px 16px;font-weight:600;font-size:13px;cursor:pointer}"
       ".tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}"
