@@ -1,16 +1,7 @@
-"""Rules-driven, distributed data-quality engine.
-
-Design mirrors a production control-table DQ framework:
-  - rules are declarative data (see dq_rules.py)
-  - a REGISTRY maps each check name to a predicate builder that returns a
-    boolean Column which is TRUE when a row PASSES
-  - row-level rules are evaluated in a SINGLE aggregation pass (no per-rule
-    full scans); uniqueness is group-level so it gets its own pass
-  - every result carries a quality DIMENSION and a pass %, keyed as
-    "check::column::dimension" (same shape as the production rule keys)
-  - critical-rule violations can gate the pipeline
-
-Checks run natively on Spark in a single pass; no external DQ dependency.
+"""Rules-driven data-quality engine. Declarative rules are dispatched through a check
+registry and evaluated in a single Spark aggregation pass (uniqueness gets its own
+pass); each result carries a quality dimension and a pass rate, and critical rules
+can gate the pipeline.
 """
 from __future__ import annotations
 

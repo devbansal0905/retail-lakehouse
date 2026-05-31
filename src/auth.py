@@ -1,10 +1,6 @@
-"""Authentication: users stored in Neo4j, salted-hash passwords, in-memory sessions.
-
-- Passwords are stored as PBKDF2-HMAC-SHA256 with a per-user salt (never plaintext).
-- Users live in Neo4j (:User {username, password}) when NEO4J_URI is set; otherwise
-  an in-memory store is used so local dev works without the graph.
-- Sessions are server-side tokens (set as an HttpOnly cookie). Each session also
-  carries the NL-to-SQL conversation history for that login.
+"""User authentication and sessions. Passwords are PBKDF2-HMAC-SHA256 with a per-user
+salt, stored in Neo4j when NEO4J_URI is set and in memory otherwise. Session tokens
+are kept in an HttpOnly cookie.
 """
 from __future__ import annotations
 

@@ -18,24 +18,24 @@ Open the live dashboard:
 **http://localhost:8000**
 
 You'll see KPI cards, a revenue-by-country chart, and top products updating in
-real time as events flow — plus an **Ask the data** box (NL-to-SQL).
+real time as events flow - plus an **Ask the data** box (NL-to-SQL).
 
 Stop with `Ctrl+C`, then `docker compose down`.
 
 ## Knobs (env in docker-compose.yml or your shell / .env)
-- `PRODUCE_INTERVAL` — seconds between event ticks (default 2)
-- `PER_TICK` — events per tick (default 120)
-- `GEMINI_API_KEY` — enables the Gemini NL-to-SQL backend (rule-based fallback otherwise)
-- `GEMINI_MODEL` — default `gemini-3.1-flash-lite`
-- `DISPLAY_TZ_OFFSET_MINUTES` — display timezone offset in minutes (default 330 = IST; data is stored in UTC)
+- `PRODUCE_INTERVAL` - seconds between event ticks (default 2)
+- `PER_TICK` - events per tick (default 120)
+- `GEMINI_API_KEY` - enables the Gemini NL-to-SQL backend (rule-based fallback otherwise)
+- `GEMINI_MODEL` - default `gemini-3.1-flash-lite`
+- `DISPLAY_TZ_OFFSET_MINUTES` - display timezone offset in minutes (default 330 = IST; data is stored in UTC)
 
 ## Endpoints
-- `GET /` — live dashboard
-- `GET /chat` — NL-to-SQL chatbot (per-session history)
-- `GET /quality` — live data-quality dashboard (per-batch checks)
-- `GET /stream` — Server-Sent Events stream (pushes on each new gold version)
-- `GET /api/kpis` — current KPI snapshot (JSON)
-- `GET /ask?q=...` — natural-language question -> SQL -> rows
+- `GET /` - live dashboard
+- `GET /chat` - NL-to-SQL chatbot (per-session history)
+- `GET /quality` - live data-quality dashboard (per-batch checks)
+- `GET /stream` - Server-Sent Events stream (pushes on each new gold version)
+- `GET /api/kpis` - current KPI snapshot (JSON)
+- `GET /ask?q=...` - natural-language question -> SQL -> rows
 
 ## Tests
 ```bash

@@ -1,20 +1,6 @@
-"""Continuous Spark Structured Streaming pipeline.
-
-readStream(landing JSON)
-  -> foreachBatch:
-       1. append the micro-batch to the BRONZE Delta table
-       2. MERGE the cleaned rows into SILVER (idempotent CDC upsert; Change Data
-          Feed enabled so row-level changes can be read back)
-       3. read ONLY the silver CDF for the version this MERGE produced, and fold
-          those deltas into the compact GOLD state tables (see gold_incremental)
-       4. run the rules-driven data-quality engine on the batch and MERGE the
-          result into the Delta CONTROL tables (see dq_control) -- per-batch log
-          plus a cumulative, additive control table. No state is held in memory.
-
-Per-batch cost scales with the change volume, not silver's size. Everything the
-dashboard needs lives in Delta tables (gold state + DQ control); the FastAPI
-server reads those tables directly and pushes updates over SSE when a new Delta
-version is committed.
+"""Spark Structured Streaming pipeline. Per non-empty micro-batch: append to bronze,
+CDC-MERGE into silver (Change Data Feed enabled), fold the silver CDF into the gold
+state tables, then run data quality and MERGE the result into the Delta control tables.
 """
 from __future__ import annotations
 

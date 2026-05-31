@@ -1,11 +1,7 @@
 """Real-time dashboard backend (FastAPI + Server-Sent Events) with login.
 
-Auth: a username/password login (users stored in Neo4j via auth.py) gates the
-dashboard and all data endpoints with an HttpOnly session cookie. Each session
-keeps its own NL-to-SQL conversation history.
-
-Pages:   /login  /  (dashboard)  /chat  /quality
-APIs:    /stream (SSE)  /api/kpis  /ask  /history  /logout
+Pages:   /login  /  /chat  /quality
+APIs:    /stream  /api/kpis  /ask  /history  /logout
 """
 from __future__ import annotations
 
@@ -162,7 +158,7 @@ def quality(request: Request):
 
 
 # --------------------------------- styles ------------------------------------
-# Shared light/modern design system, inlined into each page.
+# Shared CSS, inlined into each page.
 _CSS = """
   :root{
     --bg:#f5f6fa;--surface:#ffffff;--surface2:#fbfcfe;--border:#e6e8ee;--line:#eef0f4;

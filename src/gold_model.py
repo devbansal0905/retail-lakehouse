@@ -1,15 +1,5 @@
-"""GOLD: build a star schema + KPI tables from silver, export to the serve layer.
-
-Star schema:
-  dim_customer, dim_product, dim_date, fact_sales
-KPIs:
-  kpi_cltv          - customer lifetime value (net revenue, orders, recency)
-  kpi_country       - revenue + orders by country
-  kpi_top_products  - best sellers by net revenue
-  kpi_overview      - single-row headline metrics (AOV, repeat-rate, etc.)
-
-Gold tables are written as Delta (queryable by Spark/Genie) AND exported as CSV
-to the serve layer so the Streamlit dashboard needs no Spark runtime.
+"""Star schema (dim_customer, dim_product, dim_date, fact_sales) and KPI tables built
+from silver. Used by the test suite.
 """
 from __future__ import annotations
 

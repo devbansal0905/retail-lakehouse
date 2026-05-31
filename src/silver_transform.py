@@ -1,4 +1,4 @@
-"""SILVER: clean, type, dedupe, and CDC-merge bronze events into Delta."""
+"""Silver: clean, type, dedupe, and CDC-merge bronze events into Delta."""
 from __future__ import annotations
 
 import time

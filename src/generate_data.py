@@ -1,11 +1,6 @@
-"""Generate a synthetic Online-Retail-style dataset.
-
-Lets the whole pipeline run offline and deterministically. Schema mirrors the
-UCI "Online Retail II" dataset so you can swap in the real file (see
-scripts/download_real_data.py) without touching any pipeline code.
-
-Deliberately injects messy rows (nulls, negatives, dupes, bad types) so the
-data-quality layer has something real to catch.
+"""Generate a synthetic Online-Retail-style dataset (schema matches UCI Online Retail
+II; see scripts/download_real_data.py to swap in the real file). Injects some messy
+rows so the data-quality checks have violations to catch.
 """
 from __future__ import annotations
 

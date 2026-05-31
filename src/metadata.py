@@ -1,14 +1,6 @@
-"""Canonical metadata catalog for the analytics serving layer.
-
-This is the single source of truth for which tables/columns the NL-to-SQL agent
-is allowed to query. It is:
-  - loaded into Neo4j as a knowledge graph (see knowledge_graph.py),
-  - injected into the LLM prompt (grounding), and
-  - used to validate generated SQL (any reference to a table/column not listed
-    here is rejected) so the agent can never query something that doesn't exist.
-
-The tables below are exactly the views the realtime dashboard serves from each
-gold Delta tables (see serving.duckdb_for_nl / nl_to_sql.run_over_live).
+"""Metadata catalog: the tables and columns the NL-to-SQL agent is allowed to query.
+Loaded into Neo4j, injected into the prompt for grounding, and used to validate
+generated SQL.
 """
 from __future__ import annotations
 

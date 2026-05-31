@@ -1,16 +1,6 @@
-"""Neo4j metadata knowledge graph: source of truth for the query catalog.
-
-Graph model:
-  (:Table {name, description, grain})
-  (:Column {name, type, description})
-  (:Concept {name})
-  (Table)-[:HAS_COLUMN]->(Column)
-  (Table)-[:DESCRIBES {via}]->(Concept)
-
-`load_catalog` seeds the graph from metadata.CATALOG; `fetch_catalog` reads it
-back into the same dict shape the rest of the app uses. Everything is optional:
-if NEO4J_URI is unset or Neo4j is unreachable, callers fall back to
-metadata.CATALOG, so the app (and CI) work without the graph.
+"""Neo4j metadata knowledge graph for the query catalog. load_catalog seeds it from
+metadata.CATALOG and fetch_catalog reads it back; if Neo4j is unset or unreachable,
+callers fall back to metadata.CATALOG.
 """
 from __future__ import annotations
 

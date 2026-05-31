@@ -1,14 +1,6 @@
-"""Declarative data-quality rule config.
-
-Rules are *data*, not code: each rule names a column, a check, optional params,
-a quality dimension, and whether it's critical (gates the build). This is the
-same metadata-driven pattern used in production frameworks where rules live in
-a control table and are applied generically -- here they live in one list so
-the repo stays self-contained, but the engine (dq_checks.py) treats them
-identically to table-driven rules.
-
-Quality dimensions follow standard DAMA categories:
-  completeness | validity | uniqueness | accuracy | consistency
+"""Data-quality rules as configuration: each rule names a column, a check, optional
+params, a quality dimension, and whether it is critical. Dimensions follow the DAMA
+categories (completeness, validity, uniqueness, accuracy, consistency).
 """
 from __future__ import annotations
 

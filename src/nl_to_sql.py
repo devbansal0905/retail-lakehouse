@@ -1,16 +1,7 @@
-"""Natural-language -> SQL over the live KPI tables, with hard consistency rails.
-
-How hallucination is prevented:
-  1. GROUNDING  - the exact catalog (from the Neo4j knowledge graph when
-     available, else metadata.CATALOG) is injected into the prompt.
-  2. VALIDATION - generated SQL must be a single SELECT and may only reference
-     tables/columns that exist in the catalog. Anything else is rejected.
-  3. REPAIR     - on a validation error the Gemini backend is re-prompted with
-     the error (bounded retries); if it still fails, we fall back to a
-     deterministic rule-based query that is itself validated.
-
-Queries run in DuckDB over the KPI tables, which are derived on demand straight
-from the gold Delta tables (see serving.duckdb_for_nl) -- no Spark needed.
+"""Natural language to SQL over the KPI tables. The catalog is injected into the prompt
+for grounding and every query is validated to be a single SELECT over known
+tables and columns; invalid queries are re-prompted (bounded) or fall back to a
+rule-based query. Runs in DuckDB over views derived from the gold Delta tables.
 """
 from __future__ import annotations
 

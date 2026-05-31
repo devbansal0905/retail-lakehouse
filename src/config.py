@@ -1,8 +1,5 @@
-"""Central configuration for the retail-lakehouse pipeline.
-
-All paths derive from RETAIL_LAKEHOUSE_HOME (env var) or a local ./lakehouse
-folder. Keeping every path in one place means the same code runs locally,
-in CI, or on Databricks by changing a single environment variable.
+"""Paths and timezone configuration. All paths derive from RETAIL_LAKEHOUSE_HOME
+(default ./lakehouse); timestamps are stored in UTC and shown in DISPLAY_TZ.
 """
 from __future__ import annotations
 
@@ -48,7 +45,7 @@ HOME = Path(os.environ.get("RETAIL_LAKEHOUSE_HOME", Path.cwd() / "lakehouse")).r
 RAW_DIR = HOME / "raw"
 RAW_CSV = RAW_DIR / "online_retail.csv"
 
-# Landing zone the producer streams JSON events into (stands in for Kafka).
+# Landing zone the producer writes JSON event files into.
 LANDING_DIR = HOME / "landing"
 
 # Medallion Delta layers.

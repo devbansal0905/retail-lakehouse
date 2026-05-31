@@ -1,9 +1,4 @@
-"""Builds a Delta-enabled local SparkSession.
-
-On a real cluster / Databricks the Delta extensions are already wired in, so
-this helper is only needed for local + CI runs. `configure_spark_with_delta_pip`
-pulls the Delta jars that match the installed `delta-spark` version.
-"""
+"""Builds a Delta-enabled local SparkSession for local and CI runs."""
 from __future__ import annotations
 
 from pyspark.sql import SparkSession

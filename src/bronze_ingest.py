@@ -1,15 +1,5 @@
-"""BRONZE: structured-streaming ingest of landed JSON events into Delta.
-
-- Reads the landing zone as a stream with an explicit schema (never infer
-  schema on a stream).
-- Uses trigger=availableNow so it drains all currently-available files then
-  stops, which makes it equally usable as a batch job and as an incremental
-  micro-batch job (run it again and it only picks up new files).
-- Appends raw, untyped-ish events plus ingestion metadata. Bronze is a
-  faithful, append-only record of what arrived.
-
-On Databricks you'd swap `.format("json")` for Auto Loader
-(`.format("cloudFiles")`); everything else is identical.
+"""Bronze ingest: stream landed JSON events into Delta using an explicit schema and
+trigger=availableNow, appending raw events plus ingestion metadata.
 """
 from __future__ import annotations
 

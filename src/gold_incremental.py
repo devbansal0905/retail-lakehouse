@@ -1,18 +1,7 @@
-"""Incremental GOLD maintenance driven by the silver Change Data Feed (CDF).
-
-Instead of recomputing gold from the full silver table every micro-batch, we:
-  1. read only the rows that CHANGED in silver (the CDF delta for the new version),
-  2. turn each change into a signed contribution (+ for insert/update_postimage,
-     - for delete/update_preimage),
-  3. fold those signed deltas into two compact, additive state tables:
-        gold_invoice  (one row per invoice)  - amount, country, customer, flag
-        gold_product  (one row per product)  - revenue, units
-     via an additive Delta MERGE (t.metric + s.metric),
-  4. derive the dashboard KPIs from that compact state.
-
-Per-batch ingestion cost is therefore proportional to the change volume, not the
-size of silver. Sums/units are exact; "orders" = distinct invoices is exact
-because gold_invoice holds exactly one row per invoice.
+"""Incremental gold maintenance from the silver Change Data Feed. Each change is signed
+(+1 for insert/update_postimage, -1 for delete/update_preimage) and folded into the
+additive state tables gold_invoice and gold_product via an additive Delta MERGE, so
+per-batch cost scales with change volume rather than table size.
 """
 from __future__ import annotations
 

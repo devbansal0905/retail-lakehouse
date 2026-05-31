@@ -1,18 +1,6 @@
-"""Data-quality control tables (Delta), updated per micro-batch.
-
-Two Delta tables hold the data-quality state -- nothing is kept in memory:
-
-  dq_runs     append-only log, one row per (batch, rule). The "current batch"
-              view on the dashboard is just the newest batch_id in this table.
-
-  dq_control  the cumulative control table, one row per rule, MERGE-upserted
-              each batch: matched rows ACCUMULATE (t.rows_passed + s.rows_passed,
-              t.total + s.total, ...) and the pass rate is recomputed from the
-              running totals; unseen rules are inserted. New batches therefore
-              fold into the running result with an additive Delta MERGE, the same
-              control-table pattern used in production.
-
-The dashboard reads both tables directly (delta-rs + DuckDB) -- see serving.py.
+"""Delta data-quality control tables. dq_runs is an append-only log of one row per
+(batch, rule); dq_control is the cumulative per-rule table, MERGE-upserted additively
+each batch with the pass rate recomputed from the running totals.
 """
 from __future__ import annotations
 

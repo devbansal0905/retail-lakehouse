@@ -1,13 +1,6 @@
-"""Serving layer -- reads the gold + data-quality Delta tables directly.
-
-The dashboard and the NL-to-SQL agent both read straight from the Delta tables
-(gold_invoice, gold_product, dq_runs, dq_control) using delta-rs + DuckDB SQL.
-There is no Spark/JVM in the web process and no intermediate snapshot file: the
-streaming pipeline is the only writer, this module is read-only.
-
-The current Delta version of the gold/control tables is the change signal the
-SSE endpoint watches -- when any of them commits a new version, the dashboard
-re-reads and pushes.
+"""Read path for the dashboard and NL-to-SQL agent: load the gold and data-quality
+Delta tables with delta-rs and DuckDB and build the payload. Read-only; the Delta
+version of those tables is the SSE change signal.
 """
 from __future__ import annotations
 

@@ -1,10 +1,5 @@
-"""Event producer for the landing zone.
-
-  --mode stream  (default for real-time): continuously generates synthetic
-                 sales events and writes one JSON-Lines file per tick, forever.
-  --mode batch : replays an existing raw CSV once and exits (used for tests).
-
-Each tick stands in for a Kafka/Kinesis/Event Hub sink dropping a micro-batch.
+"""Event producer for the landing zone. --mode stream emits synthetic sales events
+continuously (one JSON file per tick); --mode batch replays an existing CSV once.
 """
 from __future__ import annotations
 
