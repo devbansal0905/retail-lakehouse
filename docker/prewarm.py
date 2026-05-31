@@ -1,7 +1,7 @@
 """Build-time warm-up: downloads the Delta jars into the image so the first
 pipeline run is fast and works without network access."""
-from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
+from pyspark.sql import SparkSession
 
 b = (SparkSession.builder.master("local[1]")
      .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
