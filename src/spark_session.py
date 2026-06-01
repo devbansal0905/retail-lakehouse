@@ -19,6 +19,8 @@ def get_spark(app_name: str = "retail-lakehouse", shuffle_partitions: int = 4) -
         .config("spark.sql.shuffle.partitions", str(shuffle_partitions))
         .config("spark.sql.session.timeZone", "Asia/Kolkata")
         .config("spark.databricks.delta.schema.autoMerge.enabled", "true")
+        .config("spark.databricks.delta.optimizeWrite.enabled", "true")
+        .config("spark.databricks.delta.autoCompact.enabled", "true")
         .config("spark.driver.memory", "2g")
         # Quieter local runs.
         .config("spark.ui.showConsoleProgress", "false")

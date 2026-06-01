@@ -77,8 +77,10 @@ def _merge_control(spark, src) -> None:
 def record_batch(spark, batch_id: int, rep: dict) -> None:
     """Persist one batch's DQ report: append the run log, then MERGE the
     cumulative control table. No state is held between batches in memory."""
-    runs = spark.createDataFrame(_runs_rows(batch_id, rep), _RUNS_SCHEMA)
-    runs.write.format("delta").mode("append").save(p(DQ_RUNS))
+    runs = (spark.createDataFrame(_runs_rows(batch_id, rep), _RUNS_SCHEMA)
+            .withColumn("quality_date", F.col("generated_ts").substr(1, 10)))
+    (runs.write.format("delta").mode("append")
+        .partitionBy("quality_date").option("mergeSchema", "true").save(p(DQ_RUNS)))
 
     control_src = runs.select(
         "rule", "check_name", "column_name", "dimension", "critical",

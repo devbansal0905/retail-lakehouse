@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 sys.path.insert(0, os.path.dirname(__file__))
 import auth  # noqa: E402
 import serving  # noqa: E402
+from config import SSE_MIN_INTERVAL_SECONDS  # noqa: E402
 
 app = FastAPI(title="Retail Lakehouse - Realtime")
 COOKIE = "rl_session"
@@ -101,7 +102,8 @@ async def stream(request: Request):
             yield f"data: {json.dumps(p)}\n\n"
             last = str(p.get("version"))
         while True:
-            await asyncio.sleep(1)
+            # Coalesce bursts: at most one push per interval, always the latest snapshot.
+            await asyncio.sleep(SSE_MIN_INTERVAL_SECONDS)
             v = _version()
             if v is not None and v != last:
                 p = _payload()

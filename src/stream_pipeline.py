@@ -11,6 +11,7 @@ from pyspark.sql import functions as F
 import dq_checks as DQ
 import dq_control as DQC
 import gold_incremental as GI
+import serving_state as SS
 import silver_transform as ST
 from bronze_ingest import LANDING_SCHEMA
 from config import BRONZE_DIR, CHECKPOINT_DIR, LANDING_DIR, SILVER_DIR, ensure_dirs, p
@@ -57,8 +58,13 @@ def process_batch(batch_df, batch_id: int) -> None:
     rep = DQ.run_expectations(src, SILVER_RULES)
     DQC.record_batch(spark, batch_id, rep)
 
+    # 5) SERVING: materialise the dashboard payload into a one-row snapshot the
+    #    web layer reads directly, then run periodic table maintenance.
+    SS.build_snapshot(spark, batch_id, rep)
+    SS.maybe_maintain(spark, batch_id)
+
     print(f"[batch {batch_id}] CDF (v>={start_version}) folded into gold; "
-          f"DQ control updated ({rep['row_count']} rows checked)")
+          f"DQ control + serving snapshot updated ({rep['row_count']} rows checked)")
 
 
 def run(trigger_seconds: float = 5.0) -> None:

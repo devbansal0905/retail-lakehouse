@@ -59,6 +59,7 @@ GOLD_INVOICE_DIR = GOLD_DIR / "gold_invoice"        # one row per invoice
 GOLD_PRODUCT_DIR = GOLD_DIR / "gold_product"        # one row per product
 DQ_CONTROL_DIR = GOLD_DIR / "dq_control"            # cumulative per-rule (MERGE-upserted)
 DQ_RUNS_DIR = GOLD_DIR / "dq_runs"                  # append-only per-batch DQ log
+SERVING_SNAPSHOT_DIR = GOLD_DIR / "serving_snapshot"  # single-row dashboard payload (read by the web layer)
 
 # Streaming checkpoints.
 CHECKPOINT_DIR = HOME / "_checkpoints"
@@ -68,6 +69,15 @@ SERVE_DIR = HOME / "serve"
 
 # Data-quality reports.
 DQ_DIR = HOME / "dq_reports"
+
+
+# --- scaling / maintenance knobs -------------------------------------------
+# Run OPTIMIZE (+ Z-ORDER) and VACUUM every N non-empty batches (0 = never).
+OPTIMIZE_EVERY_N_BATCHES = int(os.environ.get("OPTIMIZE_EVERY_N_BATCHES", "50"))
+# VACUUM retention; Delta requires >= 168h unless the safety check is disabled.
+VACUUM_RETAIN_HOURS = int(os.environ.get("VACUUM_RETAIN_HOURS", "168"))
+# Minimum seconds between SSE pushes (coalesces bursts of frequent commits).
+SSE_MIN_INTERVAL_SECONDS = float(os.environ.get("SSE_MIN_INTERVAL_SECONDS", "1.0"))
 
 
 def ensure_dirs() -> None:

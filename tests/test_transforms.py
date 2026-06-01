@@ -241,3 +241,34 @@ def test_dq_control_merge_accumulates_across_batches(tmp_path, monkeypatch):
     runs = DeltaTable.forPath(spark, config.p(config.DQ_RUNS_DIR)).toDF()
     assert runs.count() == 4                       # 2 rules x 2 batches (append log)
     assert runs.select("batch_id").distinct().count() == 2
+
+
+# --- serving snapshot read path (serving.build_payload) ----------------------
+
+def test_serving_reads_snapshot_row(tmp_path, monkeypatch):
+    """The dashboard read path returns the precomputed payload from the one-row
+    serving snapshot (O(1) read, no gold scan)."""
+    import importlib
+    import json as _json
+
+    import pyarrow as pa
+    from deltalake import write_deltalake
+
+    monkeypatch.setenv("RETAIL_LAKEHOUSE_HOME", str(tmp_path))
+    import config
+    importlib.reload(config)
+    import serving
+    importlib.reload(serving)
+
+    payload = {"version": 5, "generated_at": "2026-01-01T00:00:00+05:30",
+               "overview": {"total_revenue": 100.0}, "country": [], "top_products": [],
+               "customers": [], "data_quality": {"batch_id": 5}}
+    write_deltalake(config.p(config.SERVING_SNAPSHOT_DIR),
+                    pa.table({"snapshot_version": pa.array([5], pa.int64()),
+                              "generated_at": ["2026-01-01T00:00:00+05:30"],
+                              "payload": [_json.dumps(payload)]}), mode="overwrite")
+
+    assert serving.latest_version() == "0"
+    out = serving.build_payload()
+    assert out["overview"]["total_revenue"] == 100.0
+    assert out["data_quality"]["batch_id"] == 5

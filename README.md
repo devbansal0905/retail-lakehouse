@@ -33,7 +33,8 @@ runs locally, in Docker, or on Databricks.
 | **Incremental gold** | `src/gold_incremental.py` | Reads only the silver **Change Data Feed** delta, signs each change (`+1` insert/postimage, `-1` delete/preimage), and folds it into additive state tables (`gold_invoice`, `gold_product`) via an additive Delta MERGE (`t.metric + s.metric`). Per-batch cost scales with change volume, not silver size. |
 | **Silver transforms** | `src/silver_transform.py` | Cast types, flag cancellations, filter invalid rows, dedupe, deterministic `line_key` (sha256 of the natural key); concurrency-safe MERGE with a `DeltaConcurrentModificationException` retry loop. |
 | **Data quality** | `src/dq_checks.py` + `src/dq_rules.py` + `src/dq_control.py` | Rules-driven engine run on **every micro-batch**: declarative rules → check registry → single Spark pass, scored per DAMA dimension, critical-rule gating. Results are written to Delta **control tables** - an append-only `dq_runs` log plus a cumulative `dq_control` (additive MERGE). |
-| **Serving (read path)** | `src/serving.py` | Reads the gold state and DQ control tables **directly from Delta** with `delta-rs` + DuckDB SQL - no Spark/JVM in the web process and no snapshot file. The combined Delta **version** of those tables is the SSE change signal. |
+| **Serving snapshot** | `src/serving_state.py` | Each batch materialises the whole dashboard payload (KPIs + DQ summary) into a **single-row Delta snapshot**, so the web layer reads one row instead of scanning gold per request. Also runs periodic OPTIMIZE/Z-ORDER + VACUUM. |
+| **Serving (read path)** | `src/serving.py` | Reads that one-row snapshot with `delta-rs` (O(1)); its Delta **version** is the SSE change signal. The NL-to-SQL agent still queries gold via DuckDB, but only per question. |
 | **Realtime web** | `src/realtime_app.py` + `src/auth.py` | FastAPI with a username/password **login** (users in Neo4j, PBKDF2-hashed; session cookie). Pages: dashboard `/`, **`/chat`** (NL-to-SQL with per-session history), **`/quality`** (live data quality). APIs: `/stream` (SSE), `/api/kpis`, `/ask`, `/history`. |
 | **NL-to-SQL** | `src/nl_to_sql.py` + `src/metadata.py` + `src/knowledge_graph.py` | Question → SQL **grounded** on a metadata catalog (served from a **Neo4j knowledge graph**, with an in-repo fallback) and **validated**: any query referencing a table/column not in the catalog is rejected and the model is re-prompted with the error (bounded repairs), else a deterministic rule-based query is used. Runs in DuckDB over KPI views derived on demand from the gold Delta tables. |
 
@@ -92,14 +93,15 @@ visible.
   totals; unseen rules are inserted. This is the additive control-table pattern used in
   production CDC pipelines.
 
-### 5. Reading straight from Delta (no snapshot, no JVM)
-`serving.py` opens the gold + control tables with **`delta-rs`** (`deltalake`), hands the
-Arrow tables to **DuckDB**, and computes the dashboard payload with SQL - KPI rollups from
-`gold_invoice`/`gold_product`, current-batch DQ from `dq_runs`, cumulative DQ from
-`dq_control`. There is no intermediate snapshot file and no Spark in the web process. The
-**combined Delta version** of the gold and control tables is the change token the SSE
-endpoint watches: when any of them commits a new version, `/stream` re-reads and pushes,
-so the browser updates exactly when the data does - not on a timer.
+### 5. Serving: precompute once, read O(1)
+Each batch the pipeline computes the dashboard payload (KPI rollups from the gold tables in
+distributed Spark, current DQ from the batch report, cumulative DQ from `dq_control`) and
+overwrites a **single-row Delta snapshot** (`serving_state.py`). The web layer then reads
+that one row with `delta-rs` - a constant-time read regardless of table size, and shared
+across all clients instead of each one re-aggregating. The snapshot's Delta **version** is
+the SSE change token: `/stream` pushes when it changes, coalesced to at most one push per
+`SSE_MIN_INTERVAL_SECONDS` so a burst of commits is a single update. The NL-to-SQL agent
+still reads gold via DuckDB, but only when a question is asked, not on every refresh.
 
 ### 6. Grounded, validated NL-to-SQL
 The agent cannot query tables that do not exist. The metadata catalog (Table/Column/Concept
@@ -145,6 +147,8 @@ uvicorn realtime_app:app --app-dir src --port 8000   # open http://localhost:800
 | `DISPLAY_TZ_OFFSET_MINUTES` | `330` | Display timezone offset (330 = IST) |
 | `APP_USER` / `APP_PASSWORD` | `admin` / `admin123` | Default dashboard login |
 | `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | - | Knowledge graph + user store (optional) |
+| `OPTIMIZE_EVERY_N_BATCHES` | `50` | Run OPTIMIZE+VACUUM every N batches (0 = never) |
+| `SSE_MIN_INTERVAL_SECONDS` | `1.0` | Minimum seconds between dashboard pushes |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | - / `gemini-3.1-flash-lite` | NL-to-SQL LLM backend (rule-based fallback works without a key) |
 
 ## Tests
@@ -171,7 +175,8 @@ retail-lakehouse/
 │   ├── gold_model.py             # star schema + KPIs (batch builders, used by tests)
 │   ├── dq_rules.py · dq_checks.py     # rules-driven data quality
 │   ├── dq_control.py             # Delta DQ control tables (per-batch + cumulative MERGE)
-│   ├── serving.py                # reads gold + DQ Delta tables for the dashboard (delta-rs)
+│   ├── serving_state.py          # materialises the one-row serving snapshot + OPTIMIZE/VACUUM
+│   ├── serving.py                # reads the snapshot for the dashboard (delta-rs)
 │   ├── stream_pipeline.py        # Spark Structured Streaming orchestrator
 │   ├── realtime_app.py           # FastAPI SSE server + login + live dashboard
 │   ├── auth.py                   # users (Neo4j/in-memory) + sessions + history
@@ -192,12 +197,14 @@ retail-lakehouse/
 - **Change-driven updates.** The SSE server watches the Delta **version** of the gold +
   control tables and pushes only when a new version commits - the dashboard updates exactly
   when the data does.
-- **Scaling the read path.** At demo size the dashboard reads the gold tables in full on
-  each refresh. For large tables, materialize small pre-aggregated serving tables (or use
-  predicate/column pushdown) instead, and read those.
-- **File health.** Frequent micro-batch MERGEs create small files; schedule `OPTIMIZE`
-  (with Z-ORDER / liquid clustering) and `VACUUM` on silver/gold/control. Bound the
-  `dq_runs` log with a retention/partition-by-date policy.
+- **Read path is O(1).** The dashboard reads one precomputed snapshot row, not the gold
+  tables, so refreshes (and extra clients) don't scan large tables. KPI aggregation runs
+  once per batch in distributed Spark; for extreme cardinality, push the country/customer
+  rollups to incremental state and approximate distinct counts with HLL.
+- **File health.** `optimizeWrite`/`autoCompact` are on, and the pipeline runs `OPTIMIZE`
+  (Z-ORDER on the MERGE keys, which keeps MERGE file-pruning effective as tables grow) plus
+  `VACUUM` every `OPTIMIZE_EVERY_N_BATCHES`. `dq_runs` is partitioned by date for retention.
+- **Push storm.** SSE pushes are debounced to one per `SSE_MIN_INTERVAL_SECONDS`.
 
 ---
 Runs on a synthetic event generator (or the public UCI Online Retail II dataset).

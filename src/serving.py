@@ -1,17 +1,19 @@
-"""Read path for the dashboard and NL-to-SQL agent: load the gold and data-quality
-Delta tables with delta-rs and DuckDB and build the payload. Read-only; the Delta
-version of those tables is the SSE change signal.
+"""Read path for the dashboard and NL-to-SQL agent.
+
+The dashboard reads a single-row serving snapshot table (materialized by the
+pipeline, see serving_state.py), so a refresh is an O(1) read of one row rather
+than a scan of the gold tables. The snapshot's Delta version is the SSE change
+signal. The NL-to-SQL agent still queries the gold tables directly via DuckDB,
+but only when a question is asked, not on every refresh.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
-from decimal import Decimal
+import json
 
-from config import DISPLAY_TZ, DQ_CONTROL_DIR, DQ_RUNS_DIR, GOLD_INVOICE_DIR, GOLD_PRODUCT_DIR, p
+from config import GOLD_INVOICE_DIR, GOLD_PRODUCT_DIR, SERVING_SNAPSHOT_DIR, p
 
 
 def _table(path):
-    """Open a Delta table read-only, or None if it hasn't been created yet."""
     from deltalake import DeltaTable
     try:
         return DeltaTable(p(path))
@@ -19,50 +21,28 @@ def _table(path):
         return None
 
 
-def _version(path) -> int | None:
-    t = _table(path)
-    return t.version() if t is not None else None
-
-
 def latest_version() -> str | None:
-    """A change token combining the gold + control table versions; None until
-    the gold state exists. The SSE loop pushes whenever this token changes."""
-    gi = _version(GOLD_INVOICE_DIR)
-    if gi is None:
+    """Delta version of the serving snapshot; the SSE loop pushes when it changes."""
+    t = _table(SERVING_SNAPSHOT_DIR)
+    return str(t.version()) if t is not None else None
+
+
+def build_payload() -> dict | None:
+    """Return the precomputed dashboard payload (one tiny row), or None if the
+    pipeline has not written a snapshot yet."""
+    t = _table(SERVING_SNAPSHOT_DIR)
+    if t is None:
         return None
-    gp = _version(GOLD_PRODUCT_DIR)
-    dc = _version(DQ_CONTROL_DIR)
-    return f"{gi}.{gp}.{dc}"
-
-
-def _jsonable(v):
-    if isinstance(v, (date, datetime)):
-        return v.isoformat()
-    if isinstance(v, Decimal):
-        return float(v)
-    return v
-
-
-def _rows(cur) -> list[dict]:
-    cols = [c[0] for c in cur.description]
-    return [{c: _jsonable(v) for c, v in zip(cols, r, strict=False)} for r in cur.fetchall()]
-
-
-def _connect_gold():
-    """DuckDB connection with gold_invoice / gold_product registered, or None."""
-    import duckdb
-    gi, gp = _table(GOLD_INVOICE_DIR), _table(GOLD_PRODUCT_DIR)
-    if gi is None or gp is None:
+    rows = t.to_pyarrow_table().column("payload").to_pylist()
+    if not rows:
         return None
-    con = duckdb.connect()
-    con.register("gold_invoice", gi.to_pyarrow_table())
-    con.register("gold_product", gp.to_pyarrow_table())
-    return con
+    return json.loads(rows[0])
 
+
+# ----------------------- NL-to-SQL query surface -----------------------------
+# Queried only when a user asks a question, so a direct gold read is fine here.
 
 def _build_kpi_views(con) -> None:
-    """Create the four KPI tables the catalog/NL-to-SQL agent expects, derived
-    from the gold state with SQL."""
     con.execute("""
         CREATE TABLE kpi_overview AS
         SELECT
@@ -94,88 +74,13 @@ def _build_kpi_views(con) -> None:
 
 
 def duckdb_for_nl():
-    """Return a DuckDB connection with the KPI tables registered (for NL-to-SQL),
-    or None if the gold state has not been created yet."""
-    con = _connect_gold()
-    if con is None:
-        return None
-    _build_kpi_views(con)
-    return con
-
-
-def _read_kpis() -> dict | None:
-    con = _connect_gold()
-    if con is None:
-        return None
-    _build_kpi_views(con)
-    overview = _rows(con.execute("SELECT * FROM kpi_overview"))[0]
-    country = _rows(con.execute("SELECT * FROM kpi_country LIMIT 12"))
-    top_products = _rows(con.execute("SELECT * FROM kpi_top_products LIMIT 10"))
-    customers = _rows(con.execute("SELECT * FROM kpi_customers LIMIT 10"))
-    con.close()
-    return {"overview": overview, "country": country,
-            "top_products": top_products, "customers": customers}
-
-
-def _dq_view(con, table: str, where: str = "") -> dict:
-    """Summarise a DQ table (dq_runs slice or dq_control) into the shape the
-    quality dashboard renders."""
-    rules = _rows(con.execute(
-        f"SELECT check_name AS check, column_name AS column, dimension, critical, "
-        f"total, rows_passed, rows_failed, passed_percent FROM {table} {where} "
-        f"ORDER BY dimension, rule"))
-    by_dim: dict[str, dict] = {}
-    crit: list[str] = []
-    for r in rules:
-        d = by_dim.setdefault(r["dimension"], {"rows_failed": 0, "rules": 0})
-        d["rows_failed"] += r["rows_failed"]
-        d["rules"] += 1
-    crit = _rows(con.execute(
-        f"SELECT rule FROM {table} {where} {'AND' if where else 'WHERE'} "
-        f"critical AND rows_failed > 0"))
-    return {"rules": rules, "by_dimension": by_dim,
-            "critical_failures": [c["rule"] for c in crit]}
-
-
-def _read_dq() -> dict | None:
+    """DuckDB connection with the KPI tables registered, or None if gold is empty."""
     import duckdb
-    runs, control = _table(DQ_RUNS_DIR), _table(DQ_CONTROL_DIR)
-    if runs is None or control is None:
+    gi, gp = _table(GOLD_INVOICE_DIR), _table(GOLD_PRODUCT_DIR)
+    if gi is None or gp is None:
         return None
     con = duckdb.connect()
-    con.register("dq_runs", runs.to_pyarrow_table())
-    con.register("dq_control", control.to_pyarrow_table())
-
-    latest = con.execute("SELECT max(batch_id) FROM dq_runs").fetchone()[0]
-    cur = _dq_view(con, "dq_runs", where=f"WHERE batch_id = {int(latest)}")
-    cur["row_count"] = con.execute(
-        f"SELECT max(total) FROM dq_runs WHERE batch_id = {int(latest)}").fetchone()[0]
-    gen = con.execute(
-        f"SELECT max(generated_ts) FROM dq_runs WHERE batch_id = {int(latest)}").fetchone()[0]
-
-    overall = _dq_view(con, "dq_control")
-    agg = con.execute(
-        "SELECT max(total), max(batches), "
-        "coalesce(sum(CASE WHEN critical THEN rows_failed ELSE 0 END), 0) FROM dq_control").fetchone()
-    overall["rows_checked"], overall["batches"], overall["critical_violations"] = (
-        agg[0], agg[1], agg[2])
-    con.close()
-    return {"batch_id": int(latest), "generated_at": gen,
-            "current": cur, "overall": overall}
-
-
-def build_payload() -> dict | None:
-    """Assemble the full dashboard payload (KPIs + data quality) by reading the
-    Delta tables directly. Returns None until the pipeline has written gold."""
-    kpis = _read_kpis()
-    if kpis is None:
-        return None
-    payload = {
-        "version": latest_version(),
-        "generated_at": datetime.now(DISPLAY_TZ).isoformat(timespec="seconds"),
-        **kpis,
-    }
-    dq = _read_dq()
-    if dq is not None:
-        payload["data_quality"] = dq
-    return payload
+    con.register("gold_invoice", gi.to_pyarrow_table())
+    con.register("gold_product", gp.to_pyarrow_table())
+    _build_kpi_views(con)
+    return con
